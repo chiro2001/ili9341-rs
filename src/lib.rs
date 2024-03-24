@@ -1,10 +1,13 @@
 #![no_std]
 
+use embedded_graphics_core::geometry::Dimensions;
+use embedded_graphics_core::pixelcolor::raw::{RawData, RawU16};
+use embedded_graphics_core::primitives::{PointsIter, Rectangle};
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::OutputPin;
 
 use core::iter::once;
-use display_interface::DataFormat::{U16BEIter, U8Iter};
+use display_interface::DataFormat::{U16BEIter, U8Iter, U16BE};
 use display_interface::WriteOnlyDataCommand;
 
 #[cfg(feature = "graphics")]
@@ -145,6 +148,14 @@ where
         self.interface.send_data(U16BEIter(&mut data.into_iter()))
     }
 
+    fn write_slice(&mut self, data: &[u16]) -> Result {
+        let data_mut_ptr = data.as_ptr() as *mut u16;
+        self.command(Command::MemoryWrite, &[])?;
+        self.interface.send_data(U16BE(unsafe {
+            core::slice::from_raw_parts_mut(data_mut_ptr, data.len())
+        }))
+    }
+
     fn set_window(&mut self, x0: u16, y0: u16, x1: u16, y1: u16) -> Result {
         self.command(
             Command::ColumnAddressSet,
@@ -240,7 +251,10 @@ where
     ///
     /// The expected format is rgb565.
     pub fn draw_raw_slice(&mut self, x0: u16, y0: u16, x1: u16, y1: u16, data: &[u16]) -> Result {
-        self.draw_raw_iter(x0, y0, x1, y1, data.iter().copied())
+        // self.draw_raw_iter(x0, y0, x1, y1, data.iter().copied())
+        // optimized for DMA
+        self.set_window(x0, y0, x1, y1)?;
+        self.write_slice(data)
     }
 
     /// Change the orientation of the screen
@@ -272,6 +286,51 @@ where
         }
         self.mode = mode;
         Ok(())
+    }
+
+    pub fn fill_slice(
+        &mut self,
+        area: &Rectangle,
+        colors: &[u16],
+    ) -> Result<(), display_interface::DisplayError> {
+        let drawable_area = area.intersection(&self.bounding_box());
+
+        if let Some(drawable_bottom_right) = drawable_area.bottom_right() {
+            let x0 = drawable_area.top_left.x as u16;
+            let y0 = drawable_area.top_left.y as u16;
+            let x1 = drawable_bottom_right.x as u16;
+            let y1 = drawable_bottom_right.y as u16;
+
+            if area == &drawable_area {
+                // All pixels are on screen
+                // self.draw_raw_slice(x0, y0, x1, y1, colors)
+                // self.draw_raw_iter(x0, y0, x1, y1, colors.into_iter().map(|x| *x))
+                self.draw_raw_iter(
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    area.points()
+                        .zip(colors)
+                        .map(|(_, color)| RawU16::from(*color).into_inner()),
+                )
+            } else {
+                // Some pixels are on screen
+                self.draw_raw_iter(
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    area.points()
+                        .zip(colors)
+                        .filter(|(point, _)| drawable_area.contains(*point))
+                        .map(|(_, color)| RawU16::from(*color).into_inner()),
+                )
+            }
+        } else {
+            // No pixels are on screen
+            Ok(())
+        }
     }
 }
 
