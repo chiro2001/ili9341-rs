@@ -492,8 +492,8 @@ enum Command {
 pub struct Ili9341Async<IFACE, RESET> {
     interface: IFACE,
     reset: RESET,
-    width: usize,
-    height: usize,
+    pub width: usize,
+    pub height: usize,
     landscape: bool,
 }
 
@@ -570,7 +570,7 @@ where
         self.interface.send_data(DataFormat::U8(args)).await
     }
 
-    async fn write_iter<I: IntoIterator<Item = u16>>(&mut self, data: I) -> Result {
+    pub async fn write_iter<I: IntoIterator<Item = u16>>(&mut self, data: I) -> Result {
         self.command(Command::MemoryWrite, &[]).await?;
         use DataFormat::U16BEIter;
         self.interface
@@ -578,7 +578,7 @@ where
             .await
     }
 
-    async fn write_slice(&mut self, data: &[u16]) -> Result {
+    pub async fn write_slice(&mut self, data: &[u16]) -> Result {
         self.command(Command::MemoryWrite, &[]).await?;
         self.interface.send_data(DataFormat::U16(data)).await
     }
