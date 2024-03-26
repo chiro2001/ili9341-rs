@@ -466,7 +466,7 @@ pub enum FrameRateClockDivision {
 }
 
 #[derive(Clone, Copy)]
-enum Command {
+pub enum Command {
     SoftwareReset = 0x01,
     MemoryAccessControl = 0x36,
     PixelFormatSet = 0x3a,
@@ -563,7 +563,7 @@ impl<IFACE, RESET> Ili9341Async<IFACE, RESET>
 where
     IFACE: AsyncWriteOnlyDataCommand,
 {
-    async fn command(&mut self, cmd: Command, args: &[u8]) -> Result {
+    pub async fn command(&mut self, cmd: Command, args: &[u8]) -> Result {
         self.interface
             .send_commands(DataFormat::U8(&[cmd as u8]))
             .await?;
