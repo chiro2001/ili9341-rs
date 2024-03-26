@@ -26,8 +26,6 @@
 //!
 //! [display-interface-spi crate]: https://crates.io/crates/display-interface-spi
 use display_interface::AsyncWriteOnlyDataCommand;
-use embedded_hal::blocking::delay::DelayMs;
-use embedded_hal::digital::v2::OutputPin;
 
 use display_interface::DataFormat;
 use display_interface::WriteOnlyDataCommand;
@@ -35,6 +33,8 @@ use display_interface::WriteOnlyDataCommand;
 #[cfg(feature = "graphics")]
 mod graphics_core;
 
+use embedded_hal::delay::DelayNs;
+use embedded_hal::digital::OutputPin;
 pub use embedded_hal::spi::MODE_0 as SPI_MODE;
 
 pub use display_interface::DisplayError;
@@ -145,7 +145,7 @@ where
         _display_size: SIZE,
     ) -> Result<Self>
     where
-        DELAY: DelayMs<u16>,
+        DELAY: DelayNs,
         SIZE: DisplaySize,
         MODE: Mode,
     {
@@ -511,7 +511,7 @@ where
         _display_size: SIZE,
     ) -> Result<Self>
     where
-        DELAY: DelayMs<u16>,
+        DELAY: DelayNs,
         SIZE: DisplaySize,
         MODE: Mode,
     {
