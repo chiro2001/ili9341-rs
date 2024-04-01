@@ -489,21 +489,14 @@ pub enum Command {
     IdleModeFrameRate = 0xb2,
 }
 
-pub struct Ili9341Async<IFACE, RESET> {
-    pub interface: IFACE,
-    reset: RESET,
-    width: usize,
-    height: usize,
-    landscape: bool,
-}
-
-impl<IFACE, RESET> Ili9341Async<IFACE, RESET>
+#[cfg(feature = "async")]
+impl<IFACE, RESET> Ili9341<IFACE, RESET>
 where
     IFACE: AsyncWriteOnlyDataCommand,
     RESET: OutputPin,
 {
     // TODO: use async delay
-    pub async fn new<DELAY, SIZE, MODE>(
+    pub async fn new_async<DELAY, SIZE, MODE>(
         interface: IFACE,
         reset: RESET,
         delay: &mut DELAY,
@@ -537,54 +530,57 @@ where
         delay.delay_ms(5);
 
         // Do software reset
-        ili9341.command(Command::SoftwareReset, &[]).await?;
+        ili9341.command_async(Command::SoftwareReset, &[]).await?;
 
         // Wait 5ms after reset before sending commands
         // and 120ms before sending Sleep Out
         delay.delay_ms(120);
 
-        ili9341.set_orientation(mode).await?;
+        ili9341.set_orientation_async(mode).await?;
 
         // Set pixel format to 16 bits per pixel
-        ili9341.command(Command::PixelFormatSet, &[0x55]).await?;
+        ili9341
+            .command_async(Command::PixelFormatSet, &[0x55])
+            .await?;
 
-        ili9341.sleep_mode(ModeState::Off).await?;
+        ili9341.sleep_mode_async(ModeState::Off).await?;
 
         // Wait 5ms after Sleep Out before sending commands
         delay.delay_ms(5);
 
-        ili9341.display_mode(ModeState::On).await?;
+        ili9341.display_mode_async(ModeState::On).await?;
 
         Ok(ili9341)
     }
 }
 
-impl<IFACE, RESET> Ili9341Async<IFACE, RESET>
+#[cfg(feature = "async")]
+impl<IFACE, RESET> Ili9341<IFACE, RESET>
 where
     IFACE: AsyncWriteOnlyDataCommand,
 {
-    pub async fn command(&mut self, cmd: Command, args: &[u8]) -> Result {
+    pub async fn command_async(&mut self, cmd: Command, args: &[u8]) -> Result {
         self.interface
             .send_commands(DataFormat::U8(&[cmd as u8]))
             .await?;
         self.interface.send_data(DataFormat::U8(args)).await
     }
 
-    pub async fn write_iter<I: IntoIterator<Item = u16>>(&mut self, data: I) -> Result {
-        self.command(Command::MemoryWrite, &[]).await?;
+    pub async fn write_iter_async<I: IntoIterator<Item = u16>>(&mut self, data: I) -> Result {
+        self.command_async(Command::MemoryWrite, &[]).await?;
         use DataFormat::U16BEIter;
         self.interface
             .send_data(U16BEIter(&mut data.into_iter()))
             .await
     }
 
-    pub async fn write_slice(&mut self, data: &[u16]) -> Result {
-        self.command(Command::MemoryWrite, &[]).await?;
+    pub async fn write_slice_async(&mut self, data: &[u16]) -> Result {
+        self.command_async(Command::MemoryWrite, &[]).await?;
         self.interface.send_data(DataFormat::U16(data)).await
     }
 
-    pub async fn set_window(&mut self, x0: u16, y0: u16, x1: u16, y1: u16) -> Result {
-        self.command(
+    pub async fn set_window_async(&mut self, x0: u16, y0: u16, x1: u16, y1: u16) -> Result {
+        self.command_async(
             Command::ColumnAddressSet,
             &[
                 (x0 >> 8) as u8,
@@ -594,7 +590,7 @@ where
             ],
         )
         .await?;
-        self.command(
+        self.command_async(
             Command::PageAddressSet,
             &[
                 (y0 >> 8) as u8,
@@ -607,7 +603,7 @@ where
     }
 
     /// Configures the screen for hardware-accelerated vertical scrolling.
-    pub async fn configure_vertical_scroll(
+    pub async fn configure_vertical_scroll_async(
         &mut self,
         fixed_top_lines: u16,
         fixed_bottom_lines: u16,
@@ -619,7 +615,7 @@ where
         } as u16;
         let scroll_lines = height as u16 - fixed_top_lines - fixed_bottom_lines;
 
-        self.command(
+        self.command_async(
             Command::VerticalScrollDefine,
             &[
                 (fixed_top_lines >> 8) as u8,
@@ -635,14 +631,18 @@ where
         Ok(Scroller::new(fixed_top_lines, fixed_bottom_lines, height))
     }
 
-    pub async fn scroll_vertically(&mut self, scroller: &mut Scroller, num_lines: u16) -> Result {
+    pub async fn scroll_vertically_async(
+        &mut self,
+        scroller: &mut Scroller,
+        num_lines: u16,
+    ) -> Result {
         scroller.top_offset += num_lines;
         if scroller.top_offset > (scroller.height - scroller.fixed_bottom_lines) {
             scroller.top_offset = scroller.fixed_top_lines
                 + (scroller.top_offset + scroller.fixed_bottom_lines - scroller.height)
         }
 
-        self.command(
+        self.command_async(
             Command::VerticalScrollAddr,
             &[
                 (scroller.top_offset >> 8) as u8,
@@ -661,7 +661,7 @@ where
     ///
     /// The iterator is useful to avoid wasting memory by holding a buffer for
     /// the whole screen when it is not necessary.
-    pub async fn draw_raw_iter<I: IntoIterator<Item = u16>>(
+    pub async fn draw_raw_iter_async<I: IntoIterator<Item = u16>>(
         &mut self,
         x0: u16,
         y0: u16,
@@ -669,8 +669,8 @@ where
         y1: u16,
         data: I,
     ) -> Result {
-        self.set_window(x0, y0, x1, y1).await?;
-        self.write_iter(data).await
+        self.set_window_async(x0, y0, x1, y1).await?;
+        self.write_iter_async(data).await
     }
 
     /// Draw a rectangle on the screen, represented by top-left corner (x0, y0)
@@ -682,7 +682,7 @@ where
     /// video memory.
     ///
     /// The expected format is rgb565.
-    pub async fn draw_raw_slice(
+    pub async fn draw_raw_slice_async(
         &mut self,
         x0: u16,
         y0: u16,
@@ -690,16 +690,16 @@ where
         y1: u16,
         data: &[u16],
     ) -> Result {
-        self.set_window(x0, y0, x1, y1).await?;
-        self.write_slice(data).await
+        self.set_window_async(x0, y0, x1, y1).await?;
+        self.write_slice_async(data).await
     }
 
     /// Change the orientation of the screen
-    pub async fn set_orientation<MODE>(&mut self, mode: MODE) -> Result
+    pub async fn set_orientation_async<MODE>(&mut self, mode: MODE) -> Result
     where
         MODE: Mode,
     {
-        self.command(Command::MemoryAccessControl, &[mode.mode()])
+        self.command_async(Command::MemoryAccessControl, &[mode.mode()])
             .await?;
 
         if self.landscape ^ mode.is_landscape() {
@@ -710,66 +710,67 @@ where
     }
 
     /// Fill entire screen with specfied color u16 value
-    pub async fn clear_screen(&mut self, color: u16) -> Result {
+    pub async fn clear_screen_async(&mut self, color: u16) -> Result {
         let color = core::iter::repeat(color).take(self.width * self.height);
-        self.draw_raw_iter(0, 0, self.width as u16, self.height as u16, color)
+        self.draw_raw_iter_async(0, 0, self.width as u16, self.height as u16, color)
             .await
     }
 
     /// Control the screen sleep mode:
-    pub async fn sleep_mode(&mut self, mode: ModeState) -> Result {
+    pub async fn sleep_mode_async(&mut self, mode: ModeState) -> Result {
         match mode {
-            ModeState::On => self.command(Command::SleepModeOn, &[]),
-            ModeState::Off => self.command(Command::SleepModeOff, &[]),
+            ModeState::On => self.command_async(Command::SleepModeOn, &[]),
+            ModeState::Off => self.command_async(Command::SleepModeOff, &[]),
         }
         .await
     }
 
     /// Control the screen display mode
-    pub async fn display_mode(&mut self, mode: ModeState) -> Result {
+    pub async fn display_mode_async(&mut self, mode: ModeState) -> Result {
         match mode {
-            ModeState::On => self.command(Command::DisplayOn, &[]),
-            ModeState::Off => self.command(Command::DisplayOff, &[]),
+            ModeState::On => self.command_async(Command::DisplayOn, &[]),
+            ModeState::Off => self.command_async(Command::DisplayOff, &[]),
         }
         .await
     }
 
     /// Invert the pixel color on screen
-    pub async fn invert_mode(&mut self, mode: ModeState) -> Result {
+    pub async fn invert_mode_async(&mut self, mode: ModeState) -> Result {
         match mode {
-            ModeState::On => self.command(Command::InvertOn, &[]),
-            ModeState::Off => self.command(Command::InvertOff, &[]),
+            ModeState::On => self.command_async(Command::InvertOn, &[]),
+            ModeState::Off => self.command_async(Command::InvertOff, &[]),
         }
         .await
     }
 
     /// Idle mode reduces the number of colors to 8
-    pub async fn idle_mode(&mut self, mode: ModeState) -> Result {
+    pub async fn idle_mode_async(&mut self, mode: ModeState) -> Result {
         match mode {
-            ModeState::On => self.command(Command::IdleModeOn, &[]),
-            ModeState::Off => self.command(Command::IdleModeOff, &[]),
+            ModeState::On => self.command_async(Command::IdleModeOn, &[]),
+            ModeState::Off => self.command_async(Command::IdleModeOff, &[]),
         }
         .await
     }
 
     /// Set display brightness to the value between 0 and 255
-    pub async fn brightness(&mut self, brightness: u8) -> Result {
-        self.command(Command::SetBrightness, &[brightness]).await
+    pub async fn brightness_async(&mut self, brightness: u8) -> Result {
+        self.command_async(Command::SetBrightness, &[brightness])
+            .await
     }
 
     /// Set adaptive brightness value equal to [AdaptiveBrightness]
-    pub async fn content_adaptive_brightness(&mut self, value: AdaptiveBrightness) -> Result {
-        self.command(Command::ContentAdaptiveBrightness, &[value as _])
+    pub async fn content_adaptive_brightness_async(&mut self, value: AdaptiveBrightness) -> Result {
+        self.command_async(Command::ContentAdaptiveBrightness, &[value as _])
             .await
     }
 
     /// Configure [FrameRateClockDivision] and [FrameRate] in normal mode
-    pub async fn normal_mode_frame_rate(
+    pub async fn normal_mode_frame_rate_async(
         &mut self,
         clk_div: FrameRateClockDivision,
         frame_rate: FrameRate,
     ) -> Result {
-        self.command(
+        self.command_async(
             Command::NormalModeFrameRate,
             &[clk_div as _, frame_rate as _],
         )
@@ -777,12 +778,12 @@ where
     }
 
     /// Configure [FrameRateClockDivision] and [FrameRate] in idle mode
-    pub async fn idle_mode_frame_rate(
+    pub async fn idle_mode_frame_rate_async(
         &mut self,
         clk_div: FrameRateClockDivision,
         frame_rate: FrameRate,
     ) -> Result {
-        self.command(Command::IdleModeFrameRate, &[clk_div as _, frame_rate as _])
+        self.command_async(Command::IdleModeFrameRate, &[clk_div as _, frame_rate as _])
             .await
     }
 }

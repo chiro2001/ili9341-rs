@@ -34,6 +34,7 @@ features = ["stm32f411"]
 [features]
 default = ["graphics"]
 graphics = ["embedded-graphics-core"]
+async = []
 
 [[example]]
 name = "rtic"
