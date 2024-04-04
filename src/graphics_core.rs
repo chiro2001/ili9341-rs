@@ -1,9 +1,6 @@
 use crate::Ili9341;
 use embedded_graphics_core::{
-    pixelcolor::{
-        raw::{RawU16, RawU4},
-        Gray4, Rgb565,
-    },
+    pixelcolor::{raw::RawU16, Rgb565},
     prelude::*,
     primitives::Rectangle,
 };
@@ -57,7 +54,7 @@ where
     #[cfg(feature = "gray4")]
     type Color = Gray4;
     #[cfg(not(feature = "gray4"))]
-    type Color = Rgn565;
+    type Color = Rgb565;
 
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where
