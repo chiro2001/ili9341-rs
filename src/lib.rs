@@ -32,8 +32,6 @@ use display_interface::WriteOnlyDataCommand;
 
 #[cfg(feature = "graphics")]
 mod graphics_core;
-#[cfg(feature = "graphics")]
-pub use graphics_core::*;
 
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
